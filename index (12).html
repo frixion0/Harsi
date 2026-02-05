@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MegaVault Ultimate Master</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #00d2ff; --bg: #050505; --card: #111; --danger: #ff4b2b; --accent: #00ff88; }
+        body { background: var(--bg); color: #fff; font-family: 'Outfit', sans-serif; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1200px; display: none; }
+        
+        /* Overlays */
+        #auth-overlay, #settings-overlay, #viewer-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        #viewer-overlay { background: rgba(0,0,0,0.95); display: none; z-index: 2000; flex-direction: column; }
+        .auth-card { background: var(--card); padding: 30px; border-radius: 24px; border: 1px solid #222; width: 90%; max-width: 350px; text-align: center; }
+        
+        /* Progress & Storage */
+        .storage-bar { height: 8px; background: #1a1a1a; border-radius: 10px; overflow: hidden; margin-top: 8px; border: 1px solid #333; }
+        #storage-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), #3a7bd5); transition: width 1.5s; }
+        .prog-container { display: none; margin: 20px 0; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 15px; border: 1px solid #222; }
+        .prog-track { height: 12px; background: #000; border-radius: 20px; overflow: hidden; position: relative; }
+        .prog-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--primary)); transition: width 0.4s; box-shadow: 0 0 15px var(--accent); }
+
+        /* Previews & Grid */
+        #selection-preview { display: flex; gap: 12px; overflow-x: auto; margin-bottom: 15px; padding: 5px; }
+        .preview-wrapper { position: relative; flex-shrink: 0; }
+        .preview-item { width: 85px; height: 85px; border-radius: 12px; object-fit: cover; border: 2px solid var(--primary); }
+        .unselect-btn { position: absolute; top: -5px; right: -5px; background: var(--danger); color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; }
+        
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; width: 100%; }
+        .card { background: var(--card); border-radius: 18px; overflow: hidden; border: 1px solid #222; transition: 0.3s; }
+        .media-box { width: 100%; aspect-ratio: 1/1; background: #000; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .media-box img, .media-box video { width: 100%; height: 100%; object-fit: cover; }
+        
+        .btn { padding: 12px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; transition: 0.3s; }
+        .btn-up { background: #fff; color: #000; width: 100%; margin-top: 10px; }
+        .btn-mini { padding: 8px; font-size: 10px; background: #1a1a1a; color: #fff; border: 1px solid #333; flex: 1; border-radius: 8px; }
+        .icon-btn { background: none; border: 1px solid #333; color: #fff; padding: 10px; border-radius: 12px; cursor: pointer; }
+        input { width: 100%; padding: 14px; margin: 10px 0; border-radius: 12px; border: 1px solid #333; background: #000; color: #fff; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-overlay">
+        <div class="auth-card">
+            <h2>Vault Locked</h2>
+            <input type="password" id="login-pass" placeholder="Password">
+            <button class="btn btn-up" onclick="checkLogin()">Unlock</button>
+        </div>
+    </div>
+
+    <div id="viewer-overlay" onclick="this.style.display='none'">
+        <div id="viewer-container" style="max-width:90%; max-height:80%;"></div>
+    </div>
+
+    <div class="container" id="main-content">
+        <header style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:15px;">
+            <h1 style="font-size: 1.5rem;">Vault <span style="color:var(--primary)">Pro</span></h1>
+            <div style="display:flex; gap:10px;">
+                <button class="icon-btn" onclick="refreshGallery()">🔄</button>
+                <button class="icon-btn" onclick="showSettings()">⚙️</button>
+                <button class="icon-btn" onclick="location.reload()">🔒</button>
+            </div>
+        </header>
+
+        <div class="storage-section">
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:#888;">
+                <span id="sync-status">Decrypted</span>
+                <span id="storage-text">0 GB / 20 GB</span>
+            </div>
+            <div class="storage-bar"><div id="storage-fill"></div></div>
+        </div>
+
+        <div class="upload-panel">
+            <div id="selection-preview"></div>
+            <div id="prog-cont" class="prog-container">
+                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:8px; color:var(--accent);">
+                    <span id="prog-label">Syncing...</span>
+                    <span id="prog-percent">0%</span>
+                </div>
+                <div class="prog-track"><div id="prog-fill" class="prog-fill"></div></div>
+            </div>
+            <input type="file" id="fileInput" multiple hidden onchange="handleSelection(event)">
+            <label for="fileInput" class="btn" style="background:#111; color:#fff; display:block; text-align:center; border:1px solid #333; cursor:pointer;">📁 Select Media</label>
+            <button class="btn btn-up" id="up-btn" onclick="startBatchUpload()" disabled>Upload to Cloud</button>
+        </div>
+
+        <div class="grid" id="gallery"></div>
+    </div>
+
+    <div id="settings-overlay" style="display:none;">
+        <div class="auth-card">
+            <h3>Key Settings</h3>
+            <input type="password" id="old-p" placeholder="Old Password">
+            <input type="password" id="new-p" placeholder="New Password">
+            <button class="btn btn-up" onclick="changePass()">Update</button>
+            <button class="btn" style="background:none; color:#666;" onclick="hideSettings()">Close</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Storage } from 'https://unpkg.com/megajs/dist/main.browser-es.mjs';
+
+        const email = 'Varalakshmiannem982@gmail.com';
+        const password = 'Frixion@9887';
+        let storage;
+        let selectedFiles = [];
+        let isUnlocked = false;
+
+        if (!localStorage.getItem('v_pwd')) localStorage.setItem('v_pwd', 'password');
+
+        window.checkLogin = () => {
+            if (document.getElementById('login-pass').value === localStorage.getItem('v_pwd')) {
+                isUnlocked = true;
+                document.getElementById('auth-overlay').style.display = 'none';
+                document.getElementById('main-content').style.display = 'block';
+                init();
+            } else { alert("Access Denied"); }
+        };
+
+        window.changePass = () => {
+            if (document.getElementById('old-p').value === localStorage.getItem('v_pwd')) {
+                localStorage.setItem('v_pwd', document.getElementById('new-p').value);
+                alert("Key Updated!"); hideSettings();
+            } else { alert("Old key wrong"); }
+        };
+
+        window.showSettings = () => document.getElementById('settings-overlay').style.display = 'flex';
+        window.hideSettings = () => document.getElementById('settings-overlay').style.display = 'none';
+
+        async function init() {
+            if (!isUnlocked) return;
+            storage = await new Storage({ email, password }).ready;
+            updateStats();
+            refreshGallery();
+        }
+
+        async function updateStats() {
+            const files = Object.values(storage.files).filter(f => !f.directory);
+            let totalSize = files.reduce((acc, f) => acc + f.size, 0);
+            const gbUsed = (totalSize / (1024 ** 3)).toFixed(2);
+            document.getElementById('storage-text').innerText = `${gbUsed} GB / 20 GB`;
+            document.getElementById('storage-fill').style.width = (gbUsed / 20 * 100) + "%";
+        }
+
+        window.handleSelection = (e) => {
+            selectedFiles = Array.from(e.target.files);
+            renderSelection();
+        };
+
+        function renderSelection() {
+            const preview = document.getElementById('selection-preview');
+            preview.innerHTML = '';
+            selectedFiles.forEach((file, i) => {
+                const url = URL.createObjectURL(file);
+                preview.innerHTML += `<div class="preview-wrapper"><img src="${url}" class="preview-item"><button class="unselect-btn" onclick="unselect(${i})">×</button></div>`;
+            });
+            document.getElementById('up-btn').disabled = selectedFiles.length === 0;
+        }
+
+        window.unselect = (i) => {
+            selectedFiles.splice(i, 1);
+            renderSelection();
+        };
+
+        window.refreshGallery = async () => {
+            const grid = document.getElementById('gallery');
+            // Only show files in Cloud Drive (root), exclude Trash from main view
+            const files = Object.values(storage.files).filter(f => !f.directory && f.parent === storage.root);
+            grid.innerHTML = '';
+            document.getElementById('sync-status').innerText = "Syncing...";
+
+            for (const file of files) {
+                const id = "f" + Math.random().toString(36).substr(2, 9);
+                const isVid = file.name.match(/\.(mp4|mov|webm|mkv)$/i);
+                grid.innerHTML += `
+                    <div class="card">
+                        <div class="media-box" id="box-${id}" onclick="openViewer('${id}')">...</div>
+                        <div style="padding:10px; display:flex; gap:5px;">
+                            <button class="btn-mini" onclick="openViewer('${id}')">🔗 View</button>
+                            <button class="btn-mini" onclick="forceDown('${id}', '${file.name}')">⬇️ Save</button>
+                            <button class="btn-mini" style="color:var(--danger)" onclick="trashFile('${file.name}', this)">🗑</button>
+                        </div>
+                    </div>`;
+
+                file.downloadBuffer().then(data => {
+                    const blob = new Blob([data], { type: isVid ? 'video/mp4' : 'image/jpeg' });
+                    const url = URL.createObjectURL(blob);
+                    const box = document.getElementById(`box-${id}`);
+                    box.dataset.url = url; box.dataset.type = isVid ? 'video' : 'img';
+                    box.innerHTML = isVid ? `<video src="${url}" muted loop autoplay></video>` : `<img src="${url}">`;
+                });
+            }
+            document.getElementById('sync-status').innerText = "Synchronised";
+        };
+
+        window.trashFile = async (name, btn) => {
+            if(!confirm("Move this item to Rubbish Bin?")) return;
+            const card = btn.closest('.card');
+            card.style.opacity = '0.2';
+            try {
+                const f = Object.values(storage.files).find(x => x.name === name);
+                // In megajs, delete() without 'true' moves it to trash
+                await f.delete(); 
+                card.remove();
+                updateStats();
+            } catch (e) { card.style.opacity = '1'; }
+        };
+
+        window.openViewer = (id) => {
+            const b = document.getElementById(`box-${id}`);
+            if(!b.dataset.url) return;
+            document.getElementById('viewer-container').innerHTML = b.dataset.type === 'video' ? `<video src="${b.dataset.url}" controls style="width:100%"></video>` : `<img src="${b.dataset.url}" style="width:100%">`;
+            document.getElementById('viewer-overlay').style.display = 'flex';
+        };
+
+        window.forceDown = (id, name) => {
+            const a = document.createElement('a');
+            a.href = document.getElementById(`box-${id}`).dataset.url;
+            a.download = name; a.click();
+        };
+
+        window.startBatchUpload = async () => {
+            const progCont = document.getElementById('prog-cont');
+            progCont.style.display = 'block';
+            for (let i = 0; i < selectedFiles.length; i++) {
+                document.getElementById('prog-label').innerText = `Syncing ${i+1}/${selectedFiles.length}`;
+                const buf = new Uint8Array(await selectedFiles[i].arrayBuffer());
+                await storage.upload({ name: selectedFiles[i].name, size: selectedFiles[i].size }, buf).complete;
+                document.getElementById('prog-fill').style.width = Math.round(((i+1)/selectedFiles.length)*100) + '%';
+                document.getElementById('prog-percent').innerText = Math.round(((i+1)/selectedFiles.length)*100) + '%';
+            }
+            setTimeout(() => {
+                progCont.style.display = 'none';
+                selectedFiles = [];
+                renderSelection();
+                refreshGallery();
+                updateStats();
+            }, 800);
+        };
+    </script>
+</body>
+</html>
